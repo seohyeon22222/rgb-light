@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="version" content="SVG-v7-size-90-percent-full-area-count-102">
+    <title>최대한 많은 빛을 포착하기!</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; background: black; color: white; font-family: Arial, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; }
+        button, input { font: inherit; }
+        button { cursor: pointer; }
+        button:focus-visible, input:focus-visible { outline: 3px solid #8080ff; outline-offset: 5px; }
+        #firstScreen, #gameScreen, #resultScreen { position: fixed; inset: 0; background: black; }
+        #firstScreen { display: flex; align-items: center; justify-content: center; }
+        #nameForm { width: min(585px, 80vw); text-align: center; }
+        #nameForm h1, #nameForm button { font-size: clamp(26px, 2.5vw, 42px); font-weight: 700; }
+        #nameForm h1 { margin: 0 0 35px; }
+        #myName { display: block; width: 100%; height: clamp(70px, 11vh, 107px); padding: 12px 30px; border: 1px solid black; border-radius: 100px; background: white; color: black; text-align: center; font-size: clamp(26px, 2.5vw, 42px); }
+        #nameForm button { margin-top: 38px; padding: 0; background: black; border: 0; color: white; }
+        #gameScreen, #resultScreen { display: none; }
+        #gameScreen h1 { position: absolute; top: 5.2%; left: 0; width: 100%; margin: 0; text-align: center; font-size: clamp(23px, 2.5vw, 42px); z-index: 1; }
+        #shapeSvg { position: absolute; top: 12.3%; left: 0; width: 100%; height: 87.7%; isolation: isolate; overflow: hidden; background: black; }
+        .rgbShape { mix-blend-mode: screen; }
+        #nowButton, #tryButton { color: black; background: white; border: 0; border-radius: 100px; font-weight: 700; font-size: clamp(22px, 2vw, 33px); padding: 18px 30px; }
+        #nowButton { position: absolute; bottom: 6.2%; left: 50%; transform: translateX(-50%); min-width: 175px; z-index: 2; }
+        #resultScreen { align-items: center; justify-content: center; }
+        #resultBox { width: min(645px, 88vw); min-height: 445px; padding: 70px 24px; border: 1px solid white; border-radius: 100px; text-align: center; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 45px; }
+        #resultBox p { font-size: clamp(24px, 2.5vw, 42px); font-weight: 700; margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+        #resultName { display: inline-block; min-width: 100px; border-bottom: 4px solid white; line-height: 1.2; }
+        #tryButton { margin-top: 14px; }
+        @media (max-width: 600px) { #nameForm h1 { margin-bottom: 25px; } #nameForm button { margin-top: 28px; } #gameScreen h1 { top: 5%; padding: 0 10px; } #resultBox { min-height: 355px; border-radius: 65px; padding: 50px 18px; gap: 30px; } #nowButton, #tryButton { padding: 16px 26px; } }
+    </style>
+</head>
+<body>
+    <div id="firstScreen">
+        <form id="nameForm">
+            <h1><label for="myName">나의 이름은</label></h1>
+            <input type="text" id="myName" maxlength="10" autocomplete="off" required aria-label="띄어쓰기 없이 이름 10자까지 입력">
+            <button type="submit">입니다.</button>
+        </form>
+    </div>
+    <div id="gameScreen">
+        <h1>최대한 많은 빛을 포착하기!</h1>
+        <svg id="shapeSvg" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="크고 선명한 SVG 도형들이 회전하고 움직이며 RGB 빛을 만드는 공간"><rect id="svgBackground" fill="black" width="100%" height="100%"/></svg>
+        <button id="nowButton">NOW!</button>
+    </div>
+    <div id="resultScreen">
+        <div id="resultBox" role="status">
+            <p><span id="resultName"></span> 님은 빛을</p>
+            <p><span id="myWord"></span> <span id="myPercent"></span>%만큼 포착했습니다.</p>
+            <button id="tryButton">Try Again?</button>
+        </div>
+    </div>
+    <script>
+        var myName = document.getElementById("myName");
+        var nameForm = document.getElementById("nameForm");
+        var firstScreen = document.getElementById("firstScreen");
+        var gameScreen = document.getElementById("gameScreen");
+        var resultScreen = document.getElementById("resultScreen");
+        var nowButton = document.getElementById("nowButton");
+        var tryButton = document.getElementById("tryButton");
+        var resultName = document.getElementById("resultName");
+        var myWord = document.getElementById("myWord");
+        var myPercent = document.getElementById("myPercent");
+        var shapeSvg = document.getElementById("shapeSvg");
+        var svgNamespace = "http://www.w3.org/2000/svg";
+        var svgNodes = [];
+        var playerName = "";
+        var animation;
+        var running = false;
+        var lastTime = 0;
+        var worldWidth = 1518;
+        var worldHeight = 762;
+        var displayScale = 1;
+        var scoreScale = 1 / 3;
+        var areaCanvas = document.createElement("canvas");
+        var areaContext = areaCanvas.getContext("2d", {willReadFrequently: true});
+        var whiteArea = 0;
+        var maxWhiteArea = 0;
+        var colors = ["rgb(255,0,0)", "rgb(0,255,0)", "rgb(0,0,255)"];
+        var shapes = [
+            {"type": "circle", "w": 224, "h": 224, "color": 0, "group": 0, "bestX": 114, "bestY": 69},
+            {"type": "circle", "w": 224, "h": 224, "color": 1, "group": 0, "bestX": 114, "bestY": 69},
+            {"type": "circle", "w": 224, "h": 224, "color": 2, "group": 0, "bestX": 114, "bestY": 69},
+            {"type": "circle", "w": 118, "h": 118, "color": 0, "group": 1, "bestX": 435, "bestY": 93},
+            {"type": "circle", "w": 118, "h": 118, "color": 1, "group": 1, "bestX": 435, "bestY": 93},
+            {"type": "circle", "w": 118, "h": 118, "color": 2, "group": 1, "bestX": 435, "bestY": 93},
+            {"type": "square", "w": 222, "h": 222, "color": 0, "group": 2, "bestX": 684, "bestY": 69},
+            {"type": "square", "w": 222, "h": 222, "color": 1, "group": 2, "bestX": 684, "bestY": 69},
+            {"type": "square", "w": 222, "h": 222, "color": 2, "group": 2, "bestX": 684, "bestY": 69},
+            {"type": "bar", "w": 209, "h": 84, "color": 0, "group": 3, "bestX": 1032, "bestY": 84},
+            {"type": "bar", "w": 209, "h": 84, "color": 1, "group": 3, "bestX": 1032, "bestY": 84},
+            {"type": "bar", "w": 209, "h": 84, "color": 2, "group": 3, "bestX": 1032, "bestY": 84},
+            {"type": "bar", "w": 260, "h": 9, "color": 0, "group": 4, "bestX": 156, "bestY": 438},
+            {"type": "bar", "w": 260, "h": 9, "color": 1, "group": 4, "bestX": 156, "bestY": 438},
+            {"type": "bar", "w": 260, "h": 9, "color": 2, "group": 4, "bestX": 159, "bestY": 438},
+            {"type": "bar", "w": 260, "h": 35, "color": 0, "group": 5, "bestX": 561, "bestY": 381},
+            {"type": "bar", "w": 260, "h": 35, "color": 1, "group": 5, "bestX": 552, "bestY": 381},
+            {"type": "bar", "w": 260, "h": 35, "color": 2, "group": 5, "bestX": 552, "bestY": 381},
+            {"type": "ring", "w": 118, "h": 118, "color": 0, "group": 6, "bestX": 1041, "bestY": 363},
+            {"type": "ring", "w": 118, "h": 118, "color": 1, "group": 6, "bestX": 1041, "bestY": 363},
+            {"type": "ring", "w": 118, "h": 118, "color": 2, "group": 6, "bestX": 1041, "bestY": 363},
+            {"type": "star", "w": 90, "h": 88, "color": 0, "group": 7, "bestX": 66, "bestY": 582},
+            {"type": "star", "w": 90, "h": 88, "color": 1, "group": 7, "bestX": 66, "bestY": 582},
+            {"type": "star", "w": 90, "h": 88, "color": 2, "group": 7, "bestX": 66, "bestY": 582},
+            {"type": "star", "w": 90, "h": 88, "color": 0, "group": 8, "bestX": 372, "bestY": 588},
+            {"type": "star", "w": 90, "h": 88, "color": 1, "group": 8, "bestX": 372, "bestY": 588},
+            {"type": "star", "w": 90, "h": 88, "color": 2, "group": 8, "bestX": 372, "bestY": 588},
+            {"type": "star", "w": 90, "h": 88, "color": 0, "group": 9, "bestX": 750, "bestY": 600},
+            {"type": "star", "w": 90, "h": 88, "color": 1, "group": 9, "bestX": 750, "bestY": 600},
+            {"type": "star", "w": 90, "h": 88, "color": 2, "group": 9, "bestX": 750, "bestY": 600},
+            {"type": "star", "w": 90, "h": 88, "color": 0, "group": 10, "bestX": 1131, "bestY": 594},
+            {"type": "star", "w": 90, "h": 88, "color": 1, "group": 10, "bestX": 1131, "bestY": 594},
+            {"type": "star", "w": 90, "h": 88, "color": 2, "group": 10, "bestX": 1131, "bestY": 594},
+            {"type": "circle", "w": 19, "h": 19, "color": 0, "group": 11, "bestX": 636, "bestY": 516},
+            {"type": "circle", "w": 19, "h": 19, "color": 1, "group": 11, "bestX": 636, "bestY": 516},
+            {"type": "circle", "w": 19, "h": 19, "color": 2, "group": 11, "bestX": 636, "bestY": 516},
+            {"type": "circle", "w": 19, "h": 19, "color": 0, "group": 12, "bestX": 1320, "bestY": 360},
+            {"type": "circle", "w": 19, "h": 19, "color": 1, "group": 12, "bestX": 318, "bestY": 714},
+            {"type": "circle", "w": 19, "h": 19, "color": 2, "group": 12, "bestX": 708, "bestY": 450},
+            {"type": "circle", "w": 36, "h": 36, "color": 0, "group": 13, "bestX": 987, "bestY": 579},
+            {"type": "circle", "w": 36, "h": 36, "color": 1, "group": 13, "bestX": 987, "bestY": 579},
+            {"type": "circle", "w": 36, "h": 36, "color": 2, "group": 13, "bestX": 987, "bestY": 579},
+            {"type": "circle", "w": 36, "h": 36, "color": 0, "group": 14, "bestX": 1308, "bestY": 507},
+            {"type": "circle", "w": 36, "h": 36, "color": 1, "group": 14, "bestX": 1308, "bestY": 507},
+            {"type": "circle", "w": 36, "h": 36, "color": 2, "group": 14, "bestX": 1308, "bestY": 507},
+            {"type": "triangle", "w": 118, "h": 233, "color": 0, "group": 15, "bestX": 1212, "bestY": 123},
+            {"type": "triangle", "w": 166, "h": 329, "color": 1, "group": 15, "bestX": 1173, "bestY": 87},
+            {"type": "triangle", "w": 195, "h": 381, "color": 2, "group": 15, "bestX": 1155, "bestY": 60},
+            {"type": "circle", "w": 224, "h": 224, "color": 0, "group": 16, "bestX": 426, "bestY": 225},
+            {"type": "circle", "w": 118, "h": 118, "color": 1, "group": 17, "bestX": 465, "bestY": 288},
+            {"type": "ring", "w": 118, "h": 118, "color": 2, "group": 18, "bestX": 465, "bestY": 288}
+        ];
+
+        shapes = shapes.concat(shapes.map(function(s) { return Object.assign({}, s); }));
+
+        myName.oninput = function() {
+            myName.value = myName.value.replace(/\s/g, "").slice(0, 10);
+        }
+
+        nameForm.onsubmit = function(event) {
+            event.preventDefault();
+            playerName = myName.value.replace(/\s/g, "").slice(0, 10);
+            if (playerName == "") { myName.focus(); return; }
+            firstScreen.style.display = "none";
+            gameScreen.style.display = "block";
+            startGame();
+            nowButton.focus();
+        }
+
+        nowButton.onclick = function() {
+            running = false;
+            cancelAnimationFrame(animation);
+            whiteArea = measureArea(shapes);
+            var percent = Math.round(whiteArea / maxWhiteArea * 100);
+            if (percent > 100) { percent = 100; }
+            if (percent == 100 && whiteArea < maxWhiteArea) { percent = 99; }
+            if (percent < 0) { percent = 0; }
+            if (percent <= 35) {
+                myWord.textContent = "겨우";
+            } else if (percent <= 50) {
+                myWord.textContent = "흠~";
+            } else if (percent <= 75) {
+                myWord.textContent = "오~";
+            } else if (percent < 100) {
+                myWord.textContent = "레전드";
+            } else {
+                myWord.textContent = "천재";
+            }
+            resultName.textContent = playerName;
+            myPercent.textContent = percent;
+            gameScreen.style.display = "none";
+            resultScreen.style.display = "flex";
+            tryButton.focus();
+        }
+
+        tryButton.onclick = function() {
+            resultScreen.style.display = "none";
+            gameScreen.style.display = "block";
+            startGame();
+            nowButton.focus();
+        }
+
+        function startGame() {
+            running = false;
+            cancelAnimationFrame(animation);
+            var box = shapeSvg.getBoundingClientRect();
+            if (worldHeight != box.height / (box.width / 1518) || maxWhiteArea == 0) { fitCanvas(); }
+            for (var i = 0; i < shapes.length; i++) {
+                var s = shapes[i];
+                s.vx = (Math.random() * 50 + 30) * (Math.random() < 0.5 ? -1 : 1);
+                s.vy = (Math.random() * 50 + 30) * (Math.random() < 0.5 ? -1 : 1);
+                s.angle = Math.random() * 360;
+                s.spin = (Math.random() * 18 + 5) * (Math.random() < 0.5 ? -1 : 1);
+                var bounds = shapeBounds(s);
+                s.x = bounds.rx + 8 + Math.random() * (worldWidth - bounds.rx * 2 - 16) - s.w / 2;
+                s.y = bounds.ry + 8 + Math.random() * (worldHeight - bounds.ry * 2 - 16) - s.h / 2;
+                keepInside(s);
+            }
+            running = true;
+            lastTime = 0;
+            drawShapes();
+            animation = requestAnimationFrame(moveShapes);
+        }
+
+        function moveShapes(time) {
+            if (!running) { return; }
+            var seconds = lastTime ? Math.min((time - lastTime) / 1000, 0.05) : 0;
+            lastTime = time;
+            for (var i = 0; i < shapes.length; i++) {
+                var s = shapes[i];
+                s.x = s.x + s.vx * seconds;
+                s.y = s.y + s.vy * seconds;
+                s.angle = (s.angle + s.spin * seconds) % 360;
+                keepInside(s);
+            }
+            drawShapes();
+            animation = requestAnimationFrame(moveShapes);
+        }
+
+        function shapeBounds(s) {
+            var radians = (s.angle || 0) * Math.PI / 180;
+            var rx, ry;
+            if (s.type == "circle" || s.type == "ring") {
+                rx = ry = s.w / 2;
+            } else {
+                rx = Math.abs(Math.cos(radians)) * s.w / 2 + Math.abs(Math.sin(radians)) * s.h / 2;
+                ry = Math.abs(Math.sin(radians)) * s.w / 2 + Math.abs(Math.cos(radians)) * s.h / 2;
+            }
+            return {rx: rx, ry: ry};
+        }
+
+        function keepInside(s) {
+            var bounds = shapeBounds(s);
+            var rx = bounds.rx;
+            var ry = bounds.ry;
+            var cx = s.x + s.w / 2;
+            var cy = s.y + s.h / 2;
+            if (cx < rx + 8) { cx = rx + 8; s.vx = Math.abs(s.vx); }
+            if (cx > worldWidth - rx - 8) { cx = worldWidth - rx - 8; s.vx = -Math.abs(s.vx); }
+            if (cy < ry + 8) { cy = ry + 8; s.vy = Math.abs(s.vy); }
+            if (cy > worldHeight - ry - 8) { cy = worldHeight - ry - 8; s.vy = -Math.abs(s.vy); }
+            s.x = cx - s.w / 2;
+            s.y = cy - s.h / 2;
+        }
+
+        // 화면에 보이는 102개 도형은 모두 SVG 벡터입니다.
+        function makeSvgShape(s) {
+            var group = document.createElementNS(svgNamespace, "g");
+            group.setAttribute("class", "rgbShape");
+            group.setAttribute("fill", colors[s.color]);
+            var element;
+            if (s.type == "circle" || s.type == "ring") {
+                element = document.createElementNS(svgNamespace, "circle");
+                element.setAttribute("cx", 0);
+                element.setAttribute("cy", 0);
+                if (s.type == "ring") {
+                    element.setAttribute("r", s.w * 0.435);
+                    element.setAttribute("fill", "none");
+                    element.setAttribute("stroke", colors[s.color]);
+                    element.setAttribute("stroke-width", s.w * 0.13);
+                } else { element.setAttribute("r", s.w / 2); }
+            } else if (s.type == "star" || s.type == "triangle") {
+                element = document.createElementNS(svgNamespace, "polygon");
+                var points = [];
+                if (s.type == "triangle") {
+                    points = [s.w / 2 + "," + -s.h / 2, s.w / 2 + "," + s.h / 2, -s.w / 2 + "," + s.h / 2];
+                } else {
+                    for (var j = 0; j < 10; j++) {
+                        var angle = -Math.PI / 2 + j * Math.PI / 5;
+                        var radius = j % 2 == 0 ? 1 : 0.38;
+                        points.push(Math.cos(angle) * s.w / 2 * radius + "," + Math.sin(angle) * s.h / 2 * radius);
+                    }
+                }
+                element.setAttribute("points", points.join(" "));
+            } else {
+                element = document.createElementNS(svgNamespace, "rect");
+                element.setAttribute("x", -s.w / 2);
+                element.setAttribute("y", -s.h / 2);
+                element.setAttribute("width", s.w);
+                element.setAttribute("height", s.h);
+            }
+            group.appendChild(element);
+            shapeSvg.appendChild(group);
+            return group;
+        }
+
+        for (var i = 0; i < shapes.length; i++) {
+            shapes[i].baseW = shapes[i].w;
+            shapes[i].baseH = shapes[i].h;
+            svgNodes.push(makeSvgShape(shapes[i]));
+        }
+
+        // 보이지 않는 캔버스는 점수의 면적 계산에만 사용합니다.
+        function drawOne(s, pen) {
+            pen.save();
+            pen.translate(s.x + s.w / 2, s.y + s.h / 2);
+            pen.rotate((s.angle || 0) * Math.PI / 180);
+            pen.translate(-s.x - s.w / 2, -s.y - s.h / 2);
+            pen.fillStyle = colors[s.color];
+            pen.beginPath();
+            var x = s.x;
+            var y = s.y;
+            var w = s.w;
+            var h = s.h;
+            if (s.type == "circle" || s.type == "ring") {
+                pen.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2);
+                if (s.type == "ring") {
+                    pen.moveTo(x + w * 0.87, y + h / 2);
+                    pen.arc(x + w / 2, y + h / 2, w * 0.37, 0, Math.PI * 2, true);
+                }
+            } else if (s.type == "triangle") {
+                pen.moveTo(x + w, y);
+                pen.lineTo(x + w, y + h);
+                pen.lineTo(x, y + h);
+                pen.closePath();
+            } else if (s.type == "star") {
+                for (var j = 0; j < 10; j++) {
+                    var angle = -Math.PI / 2 + j * Math.PI / 5;
+                    var radius = j % 2 == 0 ? 1 : 0.38;
+                    var px = x + w / 2 + Math.cos(angle) * w / 2 * radius;
+                    var py = y + h / 2 + Math.sin(angle) * h / 2 * radius;
+                    if (j == 0) { pen.moveTo(px, py); }
+                    else { pen.lineTo(px, py); }
+                }
+                pen.closePath();
+            } else {
+                pen.rect(x, y, w, h);
+            }
+            pen.fill();
+            pen.restore();
+        }
+
+        function paintShapes(pen, list, width, height) {
+            pen.globalCompositeOperation = "source-over";
+            pen.fillStyle = "black";
+            pen.fillRect(0, 0, width, height);
+            pen.globalCompositeOperation = "lighter";
+            for (var i = 0; i < list.length; i++) {
+                drawOne(list[i], pen);
+            }
+            pen.globalCompositeOperation = "source-over";
+        }
+
+        function drawShapes() {
+            for (var i = 0; i < shapes.length; i++) {
+                var s = shapes[i];
+                svgNodes[i].setAttribute("transform", "translate(" + (s.x + s.w / 2) + " " + (s.y + s.h / 2) + ") rotate(" + (s.angle || 0) + ")");
+            }
+        }
+
+        function measureArea(list) {
+            areaContext.setTransform(scoreScale, 0, 0, scoreScale, 0, 0);
+            paintShapes(areaContext, list, worldWidth, worldHeight);
+            var pixels = areaContext.getImageData(0, 0, areaCanvas.width, areaCanvas.height).data;
+            var area = 0;
+            for (var i = 0; i < pixels.length; i = i + 4) {
+                if (pixels[i] == 255 && pixels[i + 1] == 255 && pixels[i + 2] == 255) {
+                    area = area + 1;
+                }
+            }
+            return area;
+        }
+
+        function fitCanvas() {
+            var box = shapeSvg.getBoundingClientRect();
+            displayScale = box.width / 1518;
+            worldWidth = 1518;
+            worldHeight = box.height / displayScale;
+            // viewBox와 화면의 비율이 같아 원과 정사각형이 찌그러지지 않습니다.
+            shapeSvg.setAttribute("viewBox", "0 0 " + worldWidth + " " + worldHeight);
+            shapeSvg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+            areaCanvas.width = Math.ceil(worldWidth * scoreScale);
+            areaCanvas.height = Math.ceil(worldHeight * scoreScale);
+            for (var i = 0; i < shapes.length; i++) {
+                var s = shapes[i];
+                var diagonal = s.type == "circle" || s.type == "ring" ? s.baseW : Math.hypot(s.baseW, s.baseH);
+                var size = Math.min(3, (worldWidth - 36) / diagonal, (worldHeight - 36) / diagonal) * 0.432;
+                var cx = (s.x || 0) + s.w / 2;
+                var cy = (s.y || 0) + s.h / 2;
+                s.w = s.baseW * size;
+                s.h = s.baseH * size;
+                s.x = cx - s.w / 2;
+                s.y = cy - s.h / 2;
+                keepInside(s);
+                svgNodes[i].remove();
+                svgNodes[i] = makeSvgShape(s);
+            }
+            maxWhiteArea = estimateMaximum();
+        }
+
+        function estimateMaximum() {
+            var best = 1;
+            var seed = 20261006;
+            function random() {
+                seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+                return seed / 4294967296;
+            }
+            // 도형이 커지고 회전하므로 새로운 배치를 탐색해 점수 기준도 갱신합니다.
+            for (var layout = 0; layout < 256; layout++) {
+                var candidate = [];
+                for (var i = 0; i < shapes.length; i++) {
+                    var s = shapes[i];
+                    var x, y, angle;
+                    if (layout < 32) {
+                        x = ((s.group % 4 + 0.5) / 4 * worldWidth + (random() - 0.5) * 160) - s.w / 2;
+                        y = ((Math.floor(s.group / 4) % 3 + 0.5) / 3 * worldHeight + (random() - 0.5) * 120) - s.h / 2;
+                        angle = (layout % 4) * 90;
+                    } else {
+                        x = random() * worldWidth - s.w / 2;
+                        y = random() * worldHeight - s.h / 2;
+                        angle = random() * 360;
+                    }
+                    var c = {type:s.type, color:s.color, w:s.w, h:s.h, x:x, y:y, angle:angle, vx:0, vy:0};
+                    keepInside(c);
+                    candidate.push(c);
+                }
+                best = Math.max(best, measureArea(candidate));
+            }
+            return best;
+        }
+
+        window.onresize = function() {
+            if (gameScreen.style.display == "block") {
+                fitCanvas();
+                drawShapes();
+            }
+        }
+    </script>
+</body>
+</html>
